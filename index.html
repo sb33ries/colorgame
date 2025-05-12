@@ -3,28 +3,60 @@
 <head>
   <meta charset="UTF-8">
   <title>Guess the Color</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
       background-color: #121212;
       color: #f0f0f0;
       font-family: 'Segoe UI', sans-serif;
-      padding: 2rem;
+      padding: 1rem;
+      margin: 0;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
     }
 
     h1, h3 {
       color: #ffffff;
+      text-align: center;
     }
 
-    .container {
-      max-width: 800px;
-      margin: auto;
+    .instructions {
+      margin-bottom: 1.5rem;
+      font-size: 1rem;
+      line-height: 1.6;
+      color: #ccc;
+      text-align: center;
+    }
+
+    .label-block {
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      display: block;
+      font-size: 1rem;
+      text-align: center;
+    }
+
+    input[type="text"] {
+      padding: 0.4rem;
+      border-radius: 5px;
+      border: none;
+      font-size: 1rem;
+      width: 250px;
+      margin: 0 auto;
+      display: block;
+      text-align: center;
     }
 
     .row {
       display: flex;
       gap: 2rem;
       align-items: center;
+      justify-content: center;
       flex-wrap: wrap;
+      text-align: center;
     }
 
     .color-box {
@@ -33,22 +65,13 @@
       border: 2px solid #888;
       border-radius: 8px;
       margin-top: 10px;
-    }
-
-    .hidden {
-      visibility: hidden;
-    }
-
-    input[type="text"], input[type="color"] {
-      padding: 0.4rem;
-      border-radius: 5px;
-      border: none;
-      font-size: 1rem;
+      cursor: pointer;
     }
 
     button {
       padding: 0.5rem 1rem;
-      margin-top: 0.5rem;
+      margin: 1rem auto;
+      display: block;
       background-color: #1e88e5;
       color: white;
       border: none;
@@ -56,8 +79,17 @@
       cursor: pointer;
     }
 
-    button:hover {
+    button:disabled {
+      background-color: #555;
+      cursor: not-allowed;
+    }
+
+    button:hover:enabled {
       background-color: #1565c0;
+    }
+
+    .hidden {
+      visibility: hidden;
     }
 
     #results {
@@ -65,17 +97,48 @@
       padding-top: 1rem;
       border-top: 1px solid #555;
     }
+
+    #countdown {
+      text-align: center;
+      font-size: 1.25rem;
+      margin-top: 1rem;
+      color: #ffcc00;
+    }
+
+    #colorGuessInput {
+      visibility: hidden;
+      position: absolute;
+      width: 0;
+      height: 0;
+    }
+
+    @media (max-width: 600px) {
+      .color-box {
+        width: 120px;
+        height: 120px;
+      }
+
+      input[type="text"] {
+        width: 90%;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Guess the Color</h1>
 
-    <label for="seedInput">Enter a seed (optional):</label><br>
-    <input type="text" id="seedInput" placeholder="Leave blank for random seed"><br>
+    <div class="instructions">
+      <p>Click "Start" to see a reference color for 5 seconds. Then, try to match it using the color picker.</p>
+      <p>You can enter a custom seed to replay a specific challenge. Otherwise, a random seed will be used.</p>
+    </div>
+
+    <label for="seedInput" class="label-block">Enter a seed (optional):</label>
+    <input type="text" id="seedInput" placeholder="Leave blank for random seed">
     <button id="startBtn">Start</button>
 
-    <p>Seed used: <span id="seedDisplay">None</span></p>
+    <p style="text-align: center;">Seed used: <span id="seedDisplay">None</span></p>
+    <div id="countdown"></div>
 
     <div class="row">
       <div>
@@ -85,9 +148,10 @@
 
       <div>
         <h3>Your Guess</h3>
-        <input type="color" id="colorGuess"><br>
-        <div id="guessColor" class="color-box"></div>
-        <button id="submitGuess">Submit Guess</button>
+        <label class="label-block">🎨 Choose your color:</label>
+        <div id="guessColor" class="color-box" style="background-color: #000;"></div>
+        <input type="color" id="colorGuessInput" disabled>
+        <button id="submitGuess" disabled>Submit Guess</button>
       </div>
     </div>
 
@@ -139,18 +203,53 @@
       return { r, g, b };
     }
 
-    function calculateAccuracy(actual, guess) {
-      const diff = Math.sqrt(
-        Math.pow(actual.r - guess.r, 2) +
-        Math.pow(actual.g - guess.g, 2) +
-        Math.pow(actual.b - guess.b, 2)
+    // RGB → XYZ → Lab conversion
+    function rgbToLab({ r, g, b }) {
+      let [R, G, B] = [r, g, b].map(v => {
+        v = v / 255;
+        return v > 0.04045 ? Math.pow((v + 0.055) / 1.055, 2.4) : v / 12.92;
+      });
+
+      const X = R * 0.4124 + G * 0.3576 + B * 0.1805;
+      const Y = R * 0.2126 + G * 0.7152 + B * 0.0722;
+      const Z = R * 0.0193 + G * 0.1192 + B * 0.9505;
+
+      const ref = { X: 0.95047, Y: 1.00000, Z: 1.08883 };
+      const xyz = [X / ref.X, Y / ref.Y, Z / ref.Z].map(t =>
+        t > 0.008856 ? Math.pow(t, 1 / 3) : (7.787 * t) + (16 / 116)
       );
-      const maxDiff = Math.sqrt(3 * Math.pow(255, 2));
-      const accuracy = 100 - (diff / maxDiff) * 100;
+
+      const [fx, fy, fz] = xyz;
+      return {
+        L: (116 * fy) - 16,
+        a: 500 * (fx - fy),
+        b: 200 * (fy - fz)
+      };
+    }
+
+    function deltaE(lab1, lab2) {
+      return Math.sqrt(
+        Math.pow(lab1.L - lab2.L, 2) +
+        Math.pow(lab1.a - lab2.a, 2) +
+        Math.pow(lab1.b - lab2.b, 2)
+      );
+    }
+
+    function calculateAccuracy(actual, guess) {
+      const lab1 = rgbToLab(actual);
+      const lab2 = rgbToLab(guess);
+      const dE = deltaE(lab1, lab2);
+      const accuracy = Math.max(0, 100 - dE); // Scale for display
       return accuracy.toFixed(2);
     }
 
     document.getElementById("startBtn").onclick = () => {
+      document.getElementById("results").innerHTML = "";
+      document.getElementById("guessColor").style.backgroundColor = "#000";
+      document.getElementById("colorGuessInput").disabled = true;
+      document.getElementById("submitGuess").disabled = true;
+      document.getElementById("countdown").textContent = "";
+
       const inputSeed = document.getElementById("seedInput").value.trim();
       seed = inputSeed || Math.random().toString(36).substring(2, 10);
       document.getElementById("seedDisplay").textContent = seed;
@@ -160,26 +259,44 @@
       showElement(refBox);
       showColor(refBox, targetColor);
 
-      // Hide after 5 seconds
-      setTimeout(() => {
-        hideElement(refBox);
-      }, 5000);
+      let timeLeft = 5;
+      const countdown = document.getElementById("countdown");
+      countdown.textContent = `Memorize the color... ${timeLeft}s`;
 
-      // Reset guess box
-      document.getElementById("guessColor").style.backgroundColor = "#000";
-      document.getElementById("results").innerHTML = "";
+      const interval = setInterval(() => {
+        timeLeft--;
+        countdown.textContent = `Memorize the color... ${timeLeft}s`;
+        if (timeLeft <= 0) {
+          clearInterval(interval);
+          countdown.textContent = "Select your color guess below.";
+          hideElement(refBox);
+          document.getElementById("colorGuessInput").disabled = false;
+          document.getElementById("submitGuess").disabled = false;
+        }
+      }, 1000);
     };
 
-    document.getElementById("submitGuess").onclick = () => {
-      const hex = document.getElementById("colorGuess").value;
-      const guess = hexToRGB(hex);
+    const guessBox = document.getElementById("guessColor");
+    const colorInput = document.getElementById("colorGuessInput");
 
-      const guessBox = document.getElementById("guessColor");
+    guessBox.addEventListener("click", () => {
+      if (!colorInput.disabled) {
+        colorInput.click();
+      }
+    });
+
+    colorInput.addEventListener("input", () => {
+      const hex = colorInput.value;
       guessBox.style.backgroundColor = hex;
+    });
 
+    document.getElementById("submitGuess").onclick = () => {
+      const hex = colorInput.value;
+      const guess = hexToRGB(hex);
       const accuracy = calculateAccuracy(targetColor, guess);
 
-      document.getElementById("results").innerHTML = `
+      const resultDiv = document.getElementById("results");
+      resultDiv.innerHTML = `
         <h3>Result</h3>
         <div class="row">
           <div>
@@ -193,9 +310,13 @@
             <p>rgb(${guess.r}, ${guess.g}, ${guess.b})</p>
           </div>
         </div>
-        <p><strong>Accuracy:</strong> ${accuracy}%</p>
+        <p><strong>Accuracy (ΔE-based):</strong> ${accuracy}%</p>
+        <p style="font-size: 0.9rem; color: #aaa; max-width: 600px; margin: auto;">
+        Accuracy is based on Delta E (CIE76) color difference, which compares the colors in Lab space to better match human perception. Lower ΔE means a closer match.</p>
         <p><strong>Seed:</strong> ${seed}</p>
       `;
+
+      resultDiv.scrollIntoView({ behavior: "smooth" });
     };
   </script>
 </body>
