@@ -68,6 +68,24 @@
       cursor: pointer;
     }
 
+    .guess-color-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    #colorGuessInput {
+      opacity: 0; /* Invisible but still interactive */
+      position: absolute;
+      width: 150px;
+      height: 150px;
+      top: 0;
+      left: 0;
+      cursor: pointer;
+      border: none;
+      padding: 0;
+      margin: 0;
+    }
+
     button {
       padding: 0.5rem 1rem;
       margin: 1rem auto;
@@ -105,13 +123,6 @@
       color: #ffcc00;
     }
 
-    #colorGuessInput {
-      visibility: hidden;
-      position: absolute;
-      width: 0;
-      height: 0;
-    }
-
     @media (max-width: 600px) {
       .color-box {
         width: 120px;
@@ -120,6 +131,11 @@
 
       input[type="text"] {
         width: 90%;
+      }
+
+      #colorGuessInput {
+        width: 120px;
+        height: 120px;
       }
     }
   </style>
@@ -149,8 +165,10 @@
       <div>
         <h3>Your Guess</h3>
         <label class="label-block">🎨 Choose your color:</label>
-        <div id="guessColor" class="color-box" style="background-color: #000;"></div>
-        <input type="color" id="colorGuessInput" disabled>
+        <div class="guess-color-wrapper">
+          <div id="guessColor" class="color-box" style="background-color: #000;"></div>
+          <input type="color" id="colorGuessInput" disabled>
+        </div>
         <button id="submitGuess" disabled>Submit Guess</button>
       </div>
     </div>
@@ -203,7 +221,6 @@
       return { r, g, b };
     }
 
-    // RGB → XYZ → Lab conversion
     function rgbToLab({ r, g, b }) {
       let [R, G, B] = [r, g, b].map(v => {
         v = v / 255;
@@ -246,7 +263,9 @@
     document.getElementById("startBtn").onclick = () => {
       document.getElementById("results").innerHTML = "";
       document.getElementById("guessColor").style.backgroundColor = "#000";
-      document.getElementById("colorGuessInput").disabled = true;
+      const colorInput = document.getElementById("colorGuessInput");
+      colorInput.disabled = true;
+      colorInput.style.pointerEvents = "none";
       document.getElementById("submitGuess").disabled = true;
       document.getElementById("countdown").textContent = "";
 
@@ -270,20 +289,15 @@
           clearInterval(interval);
           countdown.textContent = "Select your color guess below.";
           hideElement(refBox);
-          document.getElementById("colorGuessInput").disabled = false;
+          colorInput.disabled = false;
+          colorInput.style.pointerEvents = "auto";
           document.getElementById("submitGuess").disabled = false;
         }
       }, 1000);
     };
 
-    const guessBox = document.getElementById("guessColor");
     const colorInput = document.getElementById("colorGuessInput");
-
-    guessBox.addEventListener("click", () => {
-      if (!colorInput.disabled) {
-        colorInput.click();
-      }
-    });
+    const guessBox = document.getElementById("guessColor");
 
     colorInput.addEventListener("input", () => {
       const hex = colorInput.value;
